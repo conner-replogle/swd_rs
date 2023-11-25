@@ -1,32 +1,33 @@
-use std::cell::Ref;
 
+use embedded_hal::digital::v2::{OutputPin, InputPin};
 
-use esp_idf_hal::gpio::{AnyIOPin, AnyOutputPin};
-use esp_idf_sys::tm;
-
-use crate::{dap::sw_dp::Swd, constant::{DapResponse, MAX_SWD_RETRY, DpRegister, Register, AbortRegisterDef, DebugControlStatusDef, DebugSelectRegister, AccessPortRegisterAddress, APControlStatusWordDef, CSW_VALUE}};
-
-pub struct SwdDriver<'a>{
-    pub swd: Swd<'a>
+use crate::{dap::sw_dp::Swd, constant::{DapResponse, MAX_SWD_RETRY, DpRegister, Register, AbortRegisterDef, DebugControlStatusDef, DebugSelectRegister, AccessPortRegisterAddress, APControlStatusWordDef, CSW_VALUE}, error::SwdError};
+/// SWD Driver takes in a io pin and output pin and a reset pin
+pub struct SwdDriver<IO,CLK,RST,PinError: std::error::Error>{
+    pub swd: Swd<IO,CLK,RST,PinError>
 
 }
-impl <'a>SwdDriver<'a>{
-    pub fn new(swdio: AnyIOPin,swclk: AnyOutputPin,rst: AnyOutputPin) -> Self{
+impl <IO,CLK,RST,PinError: std::error::Error>SwdDriver<IO,CLK,RST,PinError> where
+IO: OutputPin<Error = PinError> + InputPin<Error = PinError>,
+CLK: OutputPin<Error = PinError>,
+RST: OutputPin<Error = PinError>
+{
+    pub fn new(swdio: IO ,swclk:  CLK ,rst: RST) -> Self{
         Self { 
             swd: Swd::new(swdio, swclk, rst)
         }
     }
-    pub fn connect(&mut self) -> Result<u32,DapResponse>{
-        self.swd.setup();
-        self.reset();
+    pub fn connect(&mut self) -> Result<u32,SwdError<PinError>>{
+        self.swd.setup()?;
+        self.reset()?;
     
-        self.swd_switch(0xE79E);
+        self.swd_switch(0xE79E)?;
     
-        self.reset();
+        self.reset()?;
     
         return self.swd_read_idcode();
     }
-    pub fn initalize(&mut self) -> Result<u32,DapResponse>{
+    pub fn initalize(&mut self) -> Result<u32,SwdError<PinError>>{
         let code = self.connect()?;
         self.write_dp(DpRegister::ABORT, AbortRegisterDef::STKCMPCLR | AbortRegisterDef::STKERRCLR | AbortRegisterDef::WDERRCLR | AbortRegisterDef::ORUNERRCLR)?;
         self.write_dp(DpRegister::SELECT, 0)?;
@@ -44,54 +45,55 @@ impl <'a>SwdDriver<'a>{
         Ok(code)
     }
 
-    pub fn reset(&mut self){
+    pub fn reset(&mut self) -> Result<(),SwdError<PinError>>{
         let mut tmp_in= [0xffu8;8];
-        self.swd.swj_sequence(51,&mut tmp_in);
+        self.swd.swj_sequence(51,&mut tmp_in)?;
+        Ok(())
     }
-    pub fn swd_switch(&mut self,val:u16){
+    pub fn swd_switch(&mut self,val:u16)-> Result<(),SwdError<PinError>>{
         let mut tmp_in= [0x00u8;2];
 
         tmp_in[0] = (val  & 0xff) as u8;
         tmp_in[1] = ((val >> 8) & 0xff) as u8;
-        self.swd.swj_sequence(16,&mut tmp_in);
+        self.swd.swj_sequence(16,&mut tmp_in)?;
+        Ok(())
     }
-    pub fn swd_read_idcode(&mut self) -> Result<u32,DapResponse>
+    pub fn swd_read_idcode(&mut self) -> Result<u32,SwdError<PinError>>
     {
         let mut tmp_in = [0u8;1];
 
-        self.swd.swj_sequence(8,&mut tmp_in);
+        self.swd.swj_sequence(8,&mut tmp_in)?;
         return self.read_dp(0);
     }
-    pub fn swd_transfer_retry(&mut self,req:u8,data: &mut Vec<u8>) -> Result<(),DapResponse>{
-        let mut ack = Err(DapResponse::DapTransferWait);
+    pub fn swd_transfer_retry(&mut self,req:u8,data: &mut Vec<u8>) -> Result<(),SwdError<PinError>>{
+        let mut ack = Err( SwdError::DapResponse(DapResponse::DapTransferWait));
 
         for _ in 0..MAX_SWD_RETRY {
             ack = self.swd.swd_transfer(req, data);
             match ack{
-                Err(DapResponse::DapTransferWait) => {continue;},
+                Err(SwdError::DapResponse(DapResponse::DapTransferWait)) => {continue;},
                 ack => {
                     return ack;
                 }
             };
-     
         }
 
         return ack;
     }
 
-    pub fn read_dp(&mut self,adr: u8) -> Result<u32,DapResponse>{
+    pub fn read_dp(&mut self,adr: u8) -> Result<u32,SwdError<PinError>>{
         let mut tmp_out = Vec::with_capacity(4);
 
         let tmp_in = Register::DP | Register::R | Register::ADR(adr) ;
-        let ack = self.swd_transfer_retry(tmp_in, &mut tmp_out)?;
+        self.swd_transfer_retry(tmp_in, &mut tmp_out)?;
         
         return Ok(u32::from_le_bytes(tmp_out[0..4].try_into().unwrap()));
     }
-    pub fn read_ap(&mut self,adr: u8,) -> Result<u32,DapResponse>{
+    pub fn read_ap(&mut self,adr: u8,) -> Result<u32,SwdError<PinError>>{
         let mut tmp_out = Vec::with_capacity(4);
 
         let tmp_in = Register::AP | Register::R | Register::ADR(adr as u8) ;
-        let ack = self.swd_transfer_retry(tmp_in, &mut tmp_out)?;
+        self.swd_transfer_retry(tmp_in, &mut tmp_out)?;
        
     
         let apsel:u32 = (adr as u32) & 0xff000000;
@@ -105,7 +107,7 @@ impl <'a>SwdDriver<'a>{
         
         return Ok(u32::from_le_bytes(tmp_out[0..4].try_into().unwrap()));
     }
-    pub fn write_dp(&mut self, adr: u8,val:u32) -> Result<(),DapResponse>{
+    pub fn write_dp(&mut self, adr: u8,val:u32) -> Result<(),SwdError<PinError>>{
         let req = Register::DP | Register::W | Register::ADR(adr );
         // switch (adr) {
         //     case DP_SELECT:
@@ -119,19 +121,18 @@ impl <'a>SwdDriver<'a>{
         //     default:
         //         break;
         // }
-        let mut data :Vec<u8> = Vec::new();
-        data = val.to_le_bytes().to_vec();
+        let mut data = val.to_le_bytes().to_vec();
         let ack = self.swd.swd_transfer(req, &mut data);
         return ack;
     }
     
 // Write access port register
-    fn write_ap(&mut self,adr:u8, val:u32) -> Result<(),DapResponse>{
+    fn write_ap(&mut self,adr:u8, val:u32) -> Result<(),SwdError<PinError>>{
     
         let apsel = (adr as u32) & 0xff000000;
         let bank_sel = (adr as u32) & DebugSelectRegister::APBANKSEL;
 
-        self.write_dp(DpRegister::SELECT, apsel | bank_sel);
+        self.write_dp(DpRegister::SELECT, apsel | bank_sel)?;
 
         //some type of caching
         // switch (adr) {
@@ -162,14 +163,14 @@ impl <'a>SwdDriver<'a>{
 
     // Rewrite the following cpp code into rust
     // Read 32-bit word from target memory.
-    pub fn read_word(&mut self,addr:u32) -> Result<u32,DapResponse>
+    pub fn read_word(&mut self,addr:u32) -> Result<u32,SwdError<PinError>>
     {
         self.write_ap(AccessPortRegisterAddress::AP_CSW, CSW_VALUE | APControlStatusWordDef::CSW_SIZE32)?;
         return self.read_data(addr);
     }
 
     // Write 32-bit word to target memory.
-    pub fn write_word(&mut self,addr:u32,val:u32) -> Result<(),DapResponse>
+    pub fn write_word(&mut self,addr:u32,val:u32) -> Result<(),SwdError<PinError>>
     {
         self.write_ap(AccessPortRegisterAddress::AP_CSW, CSW_VALUE | APControlStatusWordDef::CSW_SIZE32)?;
 
@@ -213,7 +214,7 @@ impl <'a>SwdDriver<'a>{
 
     //     return 1;
     // }
-    fn read_data(&mut self,addr:u32) -> Result<u32,DapResponse>{
+    fn read_data(&mut self,addr:u32) -> Result<u32,SwdError<PinError>>{
         let mut tmp_out: Vec<u8> = Vec::new();
         
         let req = Register::AP | Register::W | (1<<2);
@@ -225,7 +226,7 @@ impl <'a>SwdDriver<'a>{
         let val = u32::from_le_bytes(tmp_out[0..4].try_into().unwrap());
         return Ok(val);
     }
-    fn write_data(&mut self,addr:u32,data:u32) -> Result<(),DapResponse>{
+    fn write_data(&mut self,addr:u32,data:u32) -> Result<(),SwdError<PinError>>{
         let mut tmp_in = addr.to_le_bytes().to_vec();
     
         // put addr in TAR register
