@@ -12,9 +12,9 @@ IO: OutputPin<Error = PinError> + InputPin<Error = PinError>,
 CLK: OutputPin<Error = PinError>,
 RST: OutputPin<Error = PinError>
 {
-    pub fn new(swdio: IO ,swclk:  CLK ,rst: RST) -> Self{
+    pub fn new(swd: Swd<IO,CLK,RST,PinError>) -> Self{
         Self { 
-            swd: Swd::new(swdio, swclk, rst)
+            swd,
         }
     }
     pub fn connect(&mut self) -> Result<u32,SwdError<PinError>>{

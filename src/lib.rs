@@ -1,4 +1,4 @@
-
+pub mod config;
 pub mod constant;
 pub mod swd_driver;
 pub mod dap;

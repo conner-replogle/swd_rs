@@ -1,26 +1,18 @@
+use std::arch::asm;
 use std::marker::PhantomData;
 
 use embedded_hal::{digital::v2::OutputPin, can::Error};
 use embedded_hal::digital::v2::InputPin;
 
+use crate::config::SwdConfig;
 use crate::{constant::*, error::SwdError};
-
-
-pub fn pin_delay(){
-
+#[no_mangle]
+fn noop() -> u32{
+    return 20;
 }
 
 
-pub struct SwdConfig{
-    clock_delay: u32,
-    turnaround:u32 ,
-    idle_cycles:u32,
-}
-impl Default for SwdConfig{
-    fn default() -> Self{
-        Self { clock_delay: CLOCK_DELAY ,turnaround: 1,idle_cycles:0}
-    }
-}
+
 pub struct Swd<IO,CLK,RST,PinError: std::error::Error>{
     config: SwdConfig,
     swdio:  IO ,
@@ -33,8 +25,8 @@ IO: OutputPin<Error = PinError>+ InputPin<Error = PinError>,
 CLK: OutputPin<Error = PinError>,
 RST: OutputPin<Error = PinError>
 {
-    pub fn new(swdio: IO,swclk: CLK,rst: RST) -> Self{
-        Self { config: SwdConfig::default(),swdio, swclk, rst:Some(rst), _err: PhantomData }
+    pub fn new(swdio: IO,swclk: CLK,rst: RST,config:SwdConfig) -> Self{
+        Self { config,swdio, swclk, rst:Some(rst), _err: PhantomData }
     }
    
     pub fn setup(&mut self) -> Result<(),SwdError<PinError>>{
@@ -61,12 +53,12 @@ CLK: OutputPin<Error = PinError>,
 RST: OutputPin<Error = PinError>
 {
 
-
+    #[no_mangle]
     pub fn clock_delay(&self){
-        let _ =self.config.clock_delay * ((CPU_CLOCK/1000u32) + (DELAY_SLOW_CYCLES-1u32)) / DELAY_SLOW_CYCLES;
+        let cycles = ((self.config.clock_speed_mhz*1000 ) as f32/(self.config.target_speed_khz  as f32*30.0))*100.0;
         //TODO Do delay
-        for _ in 0..100{
-
+        for _ in 0..(cycles as u32){
+            noop();
 
         }
     }
@@ -82,7 +74,6 @@ RST: OutputPin<Error = PinError>
     pub fn sw_write_bit(&mut self,value:bool) -> Result<(),SwdError<PinError>>{
         self.swclk.set_low()?;
         self.swdio.set_state(value.into())?;
-        
         self.clock_delay();
         self.swclk.set_high()?;
         self.clock_delay();
