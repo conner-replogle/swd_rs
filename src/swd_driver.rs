@@ -80,6 +80,9 @@ RST: OutputPin<Error = PinError>
 
         return ack;
     }
+    pub fn swd_transfer_glitch<F: FnMut() -> ()>(&mut self,req:u8,data: &mut Vec<u8>,glitch: F) -> Result<(),SwdError<PinError>>{
+        return self.swd.glitch_swd_transfer(req, data,glitch);
+    }
 
     pub fn read_dp(&mut self,adr: u8) -> Result<u32,SwdError<PinError>>{
         let mut tmp_out = Vec::with_capacity(4);
@@ -168,6 +171,12 @@ RST: OutputPin<Error = PinError>
         self.write_ap(AccessPortRegisterAddress::AP_CSW, CSW_VALUE | APControlStatusWordDef::CSW_SIZE32)?;
         return self.read_data(addr);
     }
+    
+    pub fn read_word_glitched<F: FnMut() -> ()>(&mut self,addr:u32,glitch: F) -> Result<u32,SwdError<PinError>>
+    {
+        self.write_ap(AccessPortRegisterAddress::AP_CSW, CSW_VALUE | APControlStatusWordDef::CSW_SIZE32)?;
+        return self.read_data_glitch(addr,glitch);
+    }
 
     // Write 32-bit word to target memory.
     pub fn write_word(&mut self,addr:u32,val:u32) -> Result<(),SwdError<PinError>>
@@ -220,9 +229,25 @@ RST: OutputPin<Error = PinError>
         let req = Register::AP | Register::W | (1<<2);
         self.swd_transfer_retry(req, &mut addr.to_le_bytes().to_vec())?;
         let req = Register::AP |  Register::R | (3 << 2);
+
         self.swd_transfer_retry(req, &mut tmp_out)?;
+
         let req = Register::DP | Register::R  | Register::ADR(DpRegister::RDBUFF);
         self.swd_transfer_retry(req, &mut tmp_out)?;
+        let val = u32::from_le_bytes(tmp_out[0..4].try_into().unwrap());
+        return Ok(val);
+    }
+    fn read_data_glitch<F: FnMut() -> ()>(&mut self,addr:u32,glitch: F) -> Result<u32,SwdError<PinError>>{
+        let mut tmp_out: Vec<u8> = Vec::new();
+        
+        let req = Register::AP | Register::W | (1<<2);
+        self.swd_transfer_retry(req, &mut addr.to_le_bytes().to_vec())?;
+        let req = Register::AP |  Register::R | (3 << 2);
+
+        self.swd_transfer_retry(req, &mut tmp_out)?;
+
+        let req = Register::DP | Register::R  | Register::ADR(DpRegister::RDBUFF);
+        self.swd_transfer_glitch(req, &mut tmp_out,glitch)?;
         let val = u32::from_le_bytes(tmp_out[0..4].try_into().unwrap());
         return Ok(val);
     }

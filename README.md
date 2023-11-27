@@ -71,3 +71,4 @@ if let Ok(idcode) = swd.initalize(){
     error!("Failed To Connect");
 }
 ```
+
