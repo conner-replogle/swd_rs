@@ -9,9 +9,9 @@ This is a work in progress crate to implement the SWD protocal in rust, in order
 - [x] Implement DP Register Reading
 - [x] Setup error handling
 - [x] Read words from memory 
-- [ ] write words from memory 
+- [x] write words to memory 
 - [ ] read byte from memory 
-- [ ] write byte from memory 
+- [ ] write byte to memory 
 - [x] basic clock delay based on cpu speed.
 ## Example
 ```rs
@@ -71,3 +71,4 @@ if let Ok(idcode) = swd.initalize(){
     error!("Failed To Connect");
 }
 ```
+

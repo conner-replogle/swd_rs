@@ -7,6 +7,8 @@ use crate::constant::{DapResult, DapResponse};
 pub enum SwdError<PinError: StdError + 'static> {
     #[error("Dap Response {0:?}")]
     DapResponse(DapResponse),
+    #[error("Incorrect Params")]
+    IncorrectParams,
     #[error(transparent)]
     PinError(#[from] PinError),
 }
