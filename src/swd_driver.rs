@@ -80,6 +80,7 @@ RST: OutputPin<Error = PinError>
 
         return ack;
     }
+    #[cfg(feature = "glitch")]
     fn transfer_glitch<F: FnMut() -> ()>(&mut self,req:u8,data: &mut [u8;4],glitch: F) -> Result<(),SwdError<PinError>>{
         return self.swd.glitch_swd_transfer(req, data,glitch);
     }
@@ -171,7 +172,7 @@ RST: OutputPin<Error = PinError>
         self.write_ap(AccessPortRegisterAddress::AP_CSW, CSW_VALUE | APControlStatusWordDef::CSW_SIZE32)?;
         return self.read_data(addr);
     }
-    
+    #[cfg(feature = "glitch")]
     pub fn read_word_glitched<F: FnMut() -> ()>(&mut self,addr:u32,glitch: F) -> Result<u32,SwdError<PinError>>
     {
         self.write_ap(AccessPortRegisterAddress::AP_CSW, CSW_VALUE | APControlStatusWordDef::CSW_SIZE32)?;
@@ -237,6 +238,7 @@ RST: OutputPin<Error = PinError>
         let val = u32::from_le_bytes(tmp_out[0..4].try_into().unwrap());
         return Ok(val);
     }
+    #[cfg(feature = "glitch")]
     fn read_data_glitch<F: FnMut() -> ()>(&mut self,addr:u32,glitch: F) -> Result<u32,SwdError<PinError>>{
         let mut tmp_out= [0u8;4];
         

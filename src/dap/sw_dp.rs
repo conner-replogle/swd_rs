@@ -255,6 +255,7 @@ RST: OutputPin<Error = PinError>
         }
     
     }
+    #[cfg(feature = "glitch")]
     pub fn glitch_swd_transfer<F: FnMut() -> ()>(&mut self,request:u8, data: &mut [u8;4],mut glitch: F) -> Result<(),SwdError<PinError>>{
         let mut ack;
         let mut bit;
