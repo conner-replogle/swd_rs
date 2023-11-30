@@ -5,7 +5,7 @@ pub const DELAY_SLOW_CYCLES:u32 = 3;
 pub const MAX_SWD_RETRY:u32 = 10;
 pub const MAX_TIMEOUT:u32 = 1000000;
 
-pub const CSW_VALUE:u32 = (APControlStatusWordDef::CSW_RESERVED | APControlStatusWordDef::CSW_MSTRDBG | APControlStatusWordDef::CSW_HPROT | APControlStatusWordDef::CSW_DBGSTAT | APControlStatusWordDef::CSW_SADDRINC);
+pub const CSW_VALUE:u32 = (APControlStatusWordDef::CSW_RESERVED | APControlStatusWordDef::CSW_MSTRDBG | APControlStatusWordDef::CSW_HPROT  |APControlStatusWordDef::CSW_SADDRINC);
 
 #[repr(u8)]
 #[derive(PartialEq,Debug)]

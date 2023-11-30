@@ -77,6 +77,8 @@ RST: OutputPin<Error = PinError>
         self.clock_delay();
         self.swclk.set_high()?;
         self.clock_delay();
+        self.swclk.set_low()?;
+
         Ok(())
   
     }
@@ -115,7 +117,7 @@ RST: OutputPin<Error = PinError>
         }
         Ok(())
     }
-    pub fn swd_transfer(&mut self,request:u8, data: &mut Vec<u8>) -> Result<(),SwdError<PinError>>{
+    pub fn swd_transfer(&mut self,request:u8, data: &mut [u8;4]) -> Result<(),SwdError<PinError>>{
         let mut ack;
         let mut bit;
         let mut val:u32;
@@ -169,7 +171,7 @@ RST: OutputPin<Error = PinError>
                 if (parity ^ (bit as u32)) & 1 != 0 {                                                 
                     ack = DapResponse::DapTransferError.into();                                                
                 }                                                                          
-                *data = val.to_le_bytes().to_vec();                                                 
+                *data = val.to_le_bytes();                                                 
                 /* Turnaround */                                                           
                 for _ in 0..self.config.turnaround{
                     self.sw_clock_cycle()?;
@@ -192,7 +194,8 @@ RST: OutputPin<Error = PinError>
                     val >>= 1;                                                               
                 }                                                             
                 self.sw_write_bit(parity % 2 != 0)?;            /* Write Parity Bit */                   
-            }                                                                            
+            }                     
+            self.swdio.set_low().unwrap();                                                         
             /* Idle cycles */                                                            
             let n = self.config.idle_cycles;                                           
             if n!= 0 {                                                                     
@@ -252,7 +255,7 @@ RST: OutputPin<Error = PinError>
         }
     
     }
-    pub fn glitch_swd_transfer<F: FnMut() -> ()>(&mut self,request:u8, data: &mut Vec<u8>,mut glitch: F) -> Result<(),SwdError<PinError>>{
+    pub fn glitch_swd_transfer<F: FnMut() -> ()>(&mut self,request:u8, data: &mut [u8;4],mut glitch: F) -> Result<(),SwdError<PinError>>{
         let mut ack;
         let mut bit;
         let mut val:u32;
@@ -311,7 +314,7 @@ RST: OutputPin<Error = PinError>
                 if (parity ^ (bit as u32)) & 1 != 0 {                                                 
                     ack = DapResponse::DapTransferError.into();                                                
                 }                                                                          
-                *data = val.to_le_bytes().to_vec();                                                 
+                *data = val.to_le_bytes();                                                 
                 /* Turnaround */                                                           
                 for _ in 0..self.config.turnaround{
                     self.sw_clock_cycle()?;
